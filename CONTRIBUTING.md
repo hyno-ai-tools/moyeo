@@ -227,3 +227,7 @@ clean checkout, that's a Parley bug, not your setup — please say so in the
 report. Redact credentials, session IDs, personal paths and private transcript
 content before posting. Vulnerabilities should follow [SECURITY.md](SECURITY.md)
 rather than a public issue.
+
+## Real Codex checks and desktop history
+
+Use `runCodexTest(spec, options)` from `test/codex-real-helper.mjs` for opt-in real app-server checks. It forces ephemeral threads and rejects resume/pooling. Direct CLI checks must use `codex exec --ephemeral`. A temporary cwd alone does not isolate history. Durable resume/pool tests require a separate test `CODEX_HOME` with its own setup. Never use an existing user room session for tests. Real checks still consume subscription usage and are not run automatically.

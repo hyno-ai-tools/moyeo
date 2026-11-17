@@ -4,6 +4,8 @@ Notable changes per repository version.
 
 ## Unreleased
 
+- Add a non-persistent Codex real-test helper; keep normal room sessions persistent and reject test resume/pooling.
+
 - Support Escape dismissal for settings, app settings, tools and other overlays. Close only the top overlay, preserve background menus and native dialog cancellation, and cancel avatar cropping without applying it.
 
 - Scope live acknowledgements to first receipt and preserve settled answers across compaction/resume through shared prompt guidance. Keep natural progress updates and explicitly repeated user questions.
