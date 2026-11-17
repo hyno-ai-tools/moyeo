@@ -4734,6 +4734,7 @@ function skillAutocompleteKeydown(e) {
 function mentionOptions() {
   const seats = state.summary ? state.summary.seats : [];
   return [
+    { tag: "@auto", label: t("composer.auto"), automatic: true, color: "var(--muted)" },
     ...seats.map((a) => ({ tag: "@" + seatMention(a), color: seatColor(a) })),
     { tag: seats.length > 2 ? "@all" : "@both", color: "var(--user)" },
   ];
@@ -4745,19 +4746,22 @@ function mentionCheck() {
   const m = /(^|\s)@([\p{L}\p{N}_-]*)$/iu.exec(before);
   if (!m) return hideMention();
   const prefix = m[2].toLowerCase();
-  mItems = mentionOptions().filter((x) => x.tag.slice(1).startsWith(prefix));
+  mItems = mentionOptions().filter((x) => x.tag.slice(1).toLowerCase().startsWith(prefix) || (x.automatic && x.label.toLowerCase().startsWith(prefix)));
   if (!mItems.length) return hideMention();
   mSel = 0;
   const el = $("mention");
   el.innerHTML = mItems.map((x, i) =>
-    `<button data-i="${i}" class="${i === 0 ? "sel" : ""}"><span class="mdot" style="background:${x.color}"></span>${x.tag}</button>`).join("");
+    `<button data-i="${i}" class="${i === 0 ? "sel" : ""}"><span class="mdot" style="background:${x.color}"></span>${esc(x.label || x.tag)}</button>`).join("");
   el.style.display = "block";
   el.querySelectorAll("button").forEach((b) => { b.onclick = () => pickMention(+b.dataset.i); });
 }
 function hideMention() { $("mention").style.display = "none"; mItems = []; }
 function pickMention(i) {
+  const choice = mItems[i];
+  if (!choice) return;
+  if (choice.automatic) { state.chipRevision++; selectChip("auto"); }
   const pos = input.selectionStart;
-  const before = input.value.slice(0, pos).replace(/@[\p{L}\p{N}_-]*$/iu, mItems[i].tag + " ");
+  const before = input.value.slice(0, pos).replace(/@[\p{L}\p{N}_-]*$/iu, choice.automatic ? "" : choice.tag + " ");
   input.value = before + input.value.slice(pos);
   input.selectionStart = input.selectionEnd = before.length;
   hideMention(); updateRouteHint(); input.focus();
