@@ -27,3 +27,9 @@
 - 세 모델 모의 서버 통합: 준비 전 접수, 중복 요청, 실제 전달, 프로세스 재사용
 - 순차 전달·취소·기존 후속 작업 순서 회귀 테스트
 - 브라우저 화면 클릭 테스트 미실시
+
+## Claude 작업 중 반영 추가 검증
+
+2026-11-18 실제 Claude Sonnet 5.5, stream-json 입력 연결 및 replay-user-messages 사용. 5초 Bash 명령의 tool_use 수신 직후 최종 답변 변경 지시 전송. 실제 순서: tool_use → 추가 지시 전송 → command_lifecycle queued → tool_result → 추가 user 메시지 수신 → command_lifecycle started → 변경된 답변 → completed → 단일 result. 원래 ORIGINAL_DONE 출력 없음, UPDATED_DURING_TOOL 반영 확인.
+
+이 경우 queued는 전체 작업 종료 후 대기가 아닌 현재 도구 실행 완료 후 처리 상태. 생성 중인 개별 모델 요청 또는 실행 중인 명령을 강제로 중단하는 의미 아님. 모든 실행 시점에 즉각 반영을 보장하지 않음.

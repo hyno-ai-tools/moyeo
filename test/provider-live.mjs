@@ -176,3 +176,11 @@ test('Claude keeps the connection for a queued input after the first result', as
   const result=await runClaudeLive({cmd:process.execPath,pre:[script]}, {args:[],cwd,timeoutMs:2000,kill:p=>p.kill(),input:{type:'user',message:{role:'user',content:'FIRST'}},onLine:l=>events.push(JSON.parse(l)),onReady:fn=>{if(fn&&!once){once=true;receipt=fn('GREEN');}}});
   await receipt;assert.equal(result.code,0);assert.equal(events.at(-1).result,'GREEN');
 });
+
+test('Claude consumes a mid-tool addition before its only final result', async () => {
+ const cwd=fs.mkdtempSync(path.join(os.tmpdir(),'moyeo-claude-midtool-'));const script=path.join(cwd,'fake.cjs');
+ fs.writeFileSync(script, `const out=x=>console.log(JSON.stringify(x));require('readline').createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);if(!m.uuid){out({type:'system',subtype:'init',session_id:'session'});out({type:'assistant',message:{content:[{type:'tool_use',id:'tool',name:'Bash'}]}});return;}out({type:'command_lifecycle',state:'queued'});setTimeout(()=>{out({type:'user',message:{content:[{type:'tool_result',tool_use_id:'tool',content:'done'}]}});out(m);out({type:'result',session_id:'session',result:'UPDATED_DURING_TOOL'});},30);});`);
+ let steer,receipt,sent=false;const finals=[];
+ const result=await runClaudeLive({cmd:process.execPath,pre:[script]}, {args:[],cwd,timeoutMs:2000,kill:p=>p.kill(),input:{type:'user',message:{role:'user',content:'FIRST'}},onReady:fn=>{steer=fn;},onLine:l=>{const e=JSON.parse(l);if(e.type==='assistant'&&!sent){sent=true;receipt=steer('UPDATED_DURING_TOOL');}if(e.type==='result')finals.push(e.result);}});
+ await receipt;assert.equal(result.code,0);assert.deepEqual(finals,['UPDATED_DURING_TOOL']);
+});

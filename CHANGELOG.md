@@ -4,6 +4,8 @@ Notable changes per repository version.
 
 ## Unreleased
 
+- Verify Claude mid-tool additions are consumed before the final result; native queued status can mean waiting for the current tool, not the entire task.
+
 - Isolate all MoYEO Codex conversation storage and SQLite databases under the data root .codex-runtime directory. Import only explicitly referenced MoYEO sessions; preserve desktop records. Reuse file-based login and configuration without sharing history.
 
 - Accept non-interrupting additions before CLI readiness and deliver them in order with retry deduplication and visible status. Keep Claude alive for queued input after its first result; wait for AGY activity before sending additions.
