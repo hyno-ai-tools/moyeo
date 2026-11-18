@@ -585,3 +585,5 @@ Refresh CLI model lists when opening room settings and render the refreshed seat
 Show the CLI-provided Claude model name in the selected field while preserving its execution alias.
 
 Accept non-interrupting additions before CLI readiness and deliver them in order with retry deduplication and visible status. Keep Claude alive for queued input after its first result; wait for AGY activity before sending additions.
+
+Isolate all MoYEO Codex conversation storage and SQLite databases under the data root .codex-runtime directory. Import only explicitly referenced MoYEO sessions; preserve desktop records. Reuse file-based login and configuration without sharing history.

@@ -33,6 +33,7 @@ import { normalizeProjectDirs, projectLinksStatus, sameProjectPath } from "./lib
 import { buildCodexInvocationArgs } from "./lib/codex-command.mjs";
 import { runCodexLive } from "./lib/codex-live.mjs";
 import { closeLiveConnections } from "./lib/live-pool.mjs";
+import { prepareCodexHome } from "./lib/codex-home.mjs";
 import { orderedDelivery } from "./lib/ordered-delivery.mjs";
 import { runClaudeLive, runAgyLive } from "./lib/provider-live.mjs";
 import { workStatus } from "./lib/work-status.mjs";
@@ -1156,7 +1157,7 @@ function captureCommand(spec, args, { cwd = __dirname, timeoutMs = 120000 } = {}
  * Spawn a CLI, feed `input` on stdin, stream stdout lines to onLine,
  * enforce a timeout. Registers the child on room.procs[agent] so /stop works.
  */
-function runCli(spec, args, { cwd, timeoutMs, input, onLine, room, agent }) {
+function runCli(spec, args, { cwd, timeoutMs, input, onLine, room, agent, env = process.env }) {
   return new Promise((resolve) => {
     if (spec.error) return resolve({ code: -1, stdout: "", stderr: spec.error, spawnError: true });
     const run = room && agent ? room.runs.get(agent) : null;
@@ -1174,7 +1175,7 @@ function runCli(spec, args, { cwd, timeoutMs, input, onLine, room, agent }) {
     try {
       child = spawn(spec.cmd, [...spec.pre, ...args], {
         cwd,
-        env: process.env,
+        env,
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
         // A separate POSIX process group lets Stop/timeout terminate tools and
@@ -1857,6 +1858,7 @@ async function claudeSend(room, { seat = "claude", prompt, briefing, onStream, o
 async function codexSend(room, { seat = "codex", prompt, briefing, onStream, onActivity, onProgress, images = [], inputDir = null, allowEmpty = false, browserConnection = null }) {
   const cfg = room.cfg.agents[seat];
   const sess = room.state.agents[seat].sessionRef;
+  const codexRuntime = prepareCodexHome(ROOT, { sessionRef: sess });
   const extraArgs = checkedExtraArgs(room, seat, cfg.extraArgs);
   const tmp = path.join(os.tmpdir(), `parley-codex-${crypto.randomUUID()}.txt`);
 
@@ -1886,6 +1888,7 @@ async function codexSend(room, { seat = "codex", prompt, briefing, onStream, onA
   if (browserConnection) args.push(...browserCliArgs("codex"));
   // The seat toggle wins over conflicting extra CLI configuration.
   args.push("-c", `service_tier=${JSON.stringify(cfg.fastMode ? "fast" : "default")}`);
+  for (const [key, value] of Object.entries(codexRuntime.config)) args.push("-c", key + "=" + JSON.stringify(value));
   args.push("-"); // prompt on stdin
 
   const input = briefing ? briefing + "\n\n---\n\n" + prompt : prompt;
@@ -1963,7 +1966,7 @@ async function codexSend(room, { seat = "codex", prompt, briefing, onStream, onA
   const useLive = /^(codex)(\.(cmd|exe|ps1|js))?$/i.test(path.basename(cfg.command)) && extraArgs.length === 0 && sess !== "--last";
   if (run) run.liveCapable = useLive;
   room.liveAdjustments?.kick();
-  const liveConfig = {};
+  const liveConfig = { ...codexRuntime.config };
   if (browserConnection) {
     const browserArgs = browserCliArgs("codex");
     for (let i = 1; i < browserArgs.length; i += 2) {
@@ -1978,7 +1981,7 @@ async function codexSend(room, { seat = "codex", prompt, briefing, onStream, onA
     ? await runCodexLive(resolveCommand(cfg.command), {
       cwd: workDir(room), timeoutMs: seatTimeout(room, seat), input, images, onLine,
       sessionRef: sess, sandbox, model: cfg.model, effort: cfg.effort, fastMode: !!cfg.fastMode,
-      config: liveConfig, poolKey: room.dir + ":" + seat, poolSettings: room.cfg, kill: killTree,
+      config: liveConfig, env: codexRuntime.env, poolKey: room.dir + ":" + seat, poolSettings: room.cfg, kill: killTree,
       onChild: child => { room.procs.set(seat, child); if (run) run.child = child; },
       onReady: steer => {
         if (run) run.steer = steer;
@@ -1986,7 +1989,7 @@ async function codexSend(room, { seat = "codex", prompt, briefing, onStream, onA
         broadcast(room, { type: "room", room: roomSummary(room) });
       },
     }) : await runCli(resolveCommand(cfg.command), args, {
-    cwd: workDir(room), timeoutMs: seatTimeout(room, "codex"), input, onLine, room, agent: "codex",
+    cwd: workDir(room), timeoutMs: seatTimeout(room, "codex"), input, onLine, room, agent: seat, env: codexRuntime.env,
   });
   if (useLive && room.procs.get(seat) === run?.child) room.procs.delete(seat);
 
