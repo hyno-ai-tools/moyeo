@@ -4824,11 +4824,11 @@ function seatFieldHTML(a, field, p) {
       const label = fieldName === "model" ? (o.label || o.value) : o.value;
       const detail = [label !== o.value ? o.value : (o.label !== o.value ? o.label : ""), o.hint || ""].filter(Boolean).join(" — ");
       return `<button type="button" class="freecombo-option" role="option" id="${esc(id)}_${i}" ` +
-        `data-combo-value="${esc(o.value)}"><b>${esc(label)}</b>` +
+        `data-combo-value="${esc(o.value)}" data-combo-label="${esc(label)}"><b>${esc(label)}</b>` +
         `${detail ? `<span>${esc(detail)}</span>` : ""}</button>`;
     }).join("");
     return `<div class="freecombo">` +
-      `<input class="freecombo-input" ${d(a, fieldName)} spellcheck="false" autocomplete="off" ` +
+      `<input class="freecombo-input" ${fieldName === "model" && (p.provider === "claude" || p.label === "Claude Code CLI") ? 'data-display-label="true"' : ""} ${d(a, fieldName)} spellcheck="false" autocomplete="off" ` +
       `role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" ` +
       `aria-controls="${esc(id)}" placeholder="${esc(placeholder)}">` +
       `<button type="button" class="freecombo-toggle" aria-label="${esc(tr("settings.suggestions", "Show all suggestions"))}" title="${esc(tr("settings.suggestions", "Show all suggestions"))}">▾</button>` +
@@ -4890,7 +4890,7 @@ function setFreeComboOpen(combo, open, query = "") {
 function chooseFreeCombo(option) {
   const combo = option.closest(".freecombo");
   const input = combo.querySelector(".freecombo-input");
-  input.value = option.dataset.comboValue;
+  input.value = input.dataset.displayLabel ? option.dataset.comboLabel : option.dataset.comboValue;
   input.dispatchEvent(new Event("change", { bubbles: true }));
   setFreeComboOpen(combo, false);
   input.focus();
@@ -5017,6 +5017,10 @@ function captureSeatDraftValues() {
     for (const el of document.querySelectorAll(`#seatCards [data-seat="${item.id}"][data-f]`)) {
       const field = el.dataset.f;
       let value = el.value;
+      if (el.dataset.displayLabel) {
+        const option = [...el.closest(".freecombo").querySelectorAll(".freecombo-option")].find(o => o.dataset.comboLabel === value);
+        if (option) value = option.dataset.comboValue;
+      }
       if (field === "effort" && item.provider === "gemini" && el.disabled) value = "";
       if (field === "extraArgs") value = value.trim() ? value.trim().split(/\s+/) : [];
       else if (typeof value === "string" && value.trim() === "") value = null;
@@ -5060,7 +5064,7 @@ function renderSeatCards(s) {
   $("seatCards").innerHTML = draft.map((item, index) => {
     const a = item.id;
     const providerMeta = state.providers[item.provider] || {};
-    const p = item.existing ? { ...providerMeta, ...(s.seatInfo?.[a] || {}) } : providerMeta;
+    const p = { ...providerMeta, ...(item.existing ? s.seatInfo?.[a] : {}), provider: item.provider };
     const ag = item.existing ? s.agents[a] : null;
     const color = item.cfg.color || p.color || "#7aa2f7";
     const removable = draft.length > 2;
@@ -5108,6 +5112,10 @@ function renderSeatCards(s) {
       let value = item.cfg[el.dataset.f];
       if (el.dataset.f === "color") value = value || p.color || "#7aa2f7";
       el.value = el.dataset.f === "extraArgs" ? (value || []).join(" ") : (value ?? "");
+      if (el.dataset.displayLabel) {
+        const option = [...el.closest(".freecombo").querySelectorAll(".freecombo-option")].find(o => o.dataset.comboValue === el.value);
+        if (option) el.value = option.dataset.comboLabel;
+      }
     }
     syncAgyEffort(item.id);
   }

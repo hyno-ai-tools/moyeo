@@ -4,6 +4,8 @@ Notable changes per repository version.
 
 ## Unreleased
 
+- Show the CLI-provided Claude model name in the selected field while preserving its execution alias.
+
 - Refresh CLI model lists when opening room settings and render the refreshed seat metadata, including newly available AGY Hydrogen models. Preserve existing choices on discovery failure.
 
 - Add Auto to the composer mention picker, using the existing automatic target without inserting a model mention.

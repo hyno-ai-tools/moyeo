@@ -581,3 +581,5 @@ Codex 0.165.0, 같은 세션에서 일반/Fast 요청 각 2회. 일반 21.899초
 입력창에서 `@`를 입력한 뒤 **자동**을 선택하면 모델 호출명을 넣지 않고 기존 자동 대상 선택으로 전환합니다. 방향키·Enter 또는 마우스로 선택할 수 있습니다.
 
 Refresh CLI model lists when opening room settings and render the refreshed seat metadata, including newly available AGY Hydrogen models. Preserve existing choices on discovery failure.
+
+Show the CLI-provided Claude model name in the selected field while preserving its execution alias.
