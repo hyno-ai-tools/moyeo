@@ -120,22 +120,28 @@ test('Claude does not recycle a connection with unconfirmed additional input', a
         if (steer && !sent) { sent = true; receipt = steer('GREEN').then(() => null, error => error.message); }
       },
     });
-    assert.equal(result.code, 1);
-    assert.match(await receipt, /before confirming/);
+    assert.equal(result.code, -1);
+    assert.match(await receipt, /timed out/);
   } finally { closeLiveConnections(); }
 });
 
-for (const [command, seat] of [['claude', 'claude'], ['agy', 'gemini']]) {
+for (const [command, seat] of [['codex', 'codex'], ['claude', 'claude'], ['agy', 'gemini']]) {
   test(`${command}: HTTP additions reach the provider and subsequent messages reuse its process`, async () => {
     const server = await isolatedServer();
     const script = path.join(server.root, command + '.js');
-    const source = fake.replace("const readline=require('node:readline');", "const readline=require('node:readline');if(process.argv.includes('-p')||process.argv.includes('acp'))require('node:fs').appendFileSync(__filename+'.pids',process.pid+'\\n');")
+    const source = fake.replace("const readline=require('node:readline');", "const readline=require('node:readline');if(process.argv.includes('-p')||process.argv.includes('acp')||process.argv.includes('app-server'))require('node:fs').appendFileSync(__filename+'.pids',process.pid+'\\n');")
       .replace("m.message.content==='FIRST'", "m.message.content.includes('FIRST') && n++===0")
-      .replace("text==='FIRST'", "text.includes('FIRST') && n++===0");
+      .replace("text==='FIRST'", "text.includes('FIRST') && n++===0")
+      .replace("p.input[0].text==='FIRST'", "p.input[0].text.includes('FIRST') && n===1")
+      .replace("reply({thread:{id:'session'}})", "setTimeout(()=>reply({thread:{id:'session'}}),180)")
+      .replace("reply({sessionId:'session'})", "setTimeout(()=>reply({sessionId:'session'}),180)")
+      .replace("out({type:'system',subtype:'init',session_id:'session'})", "setTimeout(()=>out({type:'system',subtype:'init',session_id:'session'}),180)")
+      .replace("reply({turnId:p.expectedTurnId});", "out({method:'item/completed',params:{item:{id:'answer',type:'agentMessage',text:p.input[0].text}}});reply({turnId:p.expectedTurnId});")
+      .replace("return setTimeout(()=>out({method:'turn/completed',params:{turn:{id:'turn'+n,status:'completed'}}}),40);", "out({method:'item/completed',params:{item:{id:'answer'+n,type:'agentMessage',text:'SECOND'}}});return setTimeout(()=>out({method:'turn/completed',params:{turn:{id:'turn'+n,status:'completed'}}}),40);");
     fs.writeFileSync(script, source);
     try {
       const cfg = await server.api('POST', '/api/config', { room: 'default',
-        seats: [{id:'codex',provider:'codex'}, {id:seat,provider:seat}],
+        seats: [{id:seat==='codex'?'claude':'codex',provider:seat==='codex'?'claude':'codex'}, {id:seat,provider:seat}],
         config: { agents: { [seat]: {command:script, lurk:false, ...(seat==='gemini'?{approvalMode:'full'}:{})} } } });
       assert.equal(cfg.status, 200, JSON.stringify(cfg.data));
       const wait = async predicate => {
@@ -143,16 +149,30 @@ for (const [command, seat] of [['claude', 'claude'], ['agy', 'gemini']]) {
         const last=await server.room('default'); assert.fail('Room state did not settle: '+JSON.stringify({busy:last.room.busy,tail:last.entries.slice(-2).map(e=>({kind:e.kind,text:e.text?.slice(0,200)}))}));
       };
       await server.api('POST','/api/message',{room:'default',target:seat,text:'FIRST'});
-      const state=await wait(s=>s.room.busyInfo.some(r=>r.agent===seat&&r.liveSteering));
+      const state=await wait(s=>s.room.busyInfo.some(r=>r.agent===seat));
       const sourceN=state.entries.find(e=>e.kind==='user').n;
       assert.equal((await server.api('POST','/api/adjustment',{room:'default',id:'provider-add',action:'stage',sourceN,target:seat,text:'GREEN'})).status,200);
       const sent=await server.api('POST','/api/adjustment',{room:'default',id:'provider-add',action:'send'});
       assert.equal(sent.status,200,JSON.stringify(sent.data));
+      assert.equal(sent.data.accepted,true);
+      const retried=await server.api('POST','/api/adjustment',{room:'default',id:'provider-add',action:'send'});
+      assert.equal(retried.status,200);
       const done=await wait(s=>!s.room.busy.length);
       assert.ok(done.entries.some(e=>e.kind==='agent'&&e.author===seat&&e.text.includes('GREEN')));
+      assert.equal(done.entries.filter(e=>e.kind==='user'&&e.meta?.askFrom?.adjustmentId==='provider-add').length,1);
       await server.api('POST','/api/message',{room:'default',target:seat,text:'SECOND'});
       await wait(s=>!s.room.busy.length&&s.entries.filter(e=>e.kind==='agent'&&e.author===seat).length===2);
       assert.equal(fs.readFileSync(script+'.pids','utf8').trim().split('\n').length,1,fs.readFileSync(script+'.pids','utf8'));
     } finally { await server.close(); }
   });
 }
+
+// A first result is not evidence that a queued input was consumed.
+test('Claude keeps the connection for a queued input after the first result', async () => {
+  const cwd=fs.mkdtempSync(path.join(os.tmpdir(),'moyeo-claude-late-'));
+  const script=path.join(cwd,'fake.cjs');
+  fs.writeFileSync(script, fake.replace('if(m.uuid)out(m);', 'if(m.uuid){out({type:"result",session_id:"session",result:"FIRST_DONE"});setTimeout(()=>{out(m);out({type:"result",session_id:"session",result:m.message.content});},30);return;}'));
+  let receipt,once=false;const events=[];
+  const result=await runClaudeLive({cmd:process.execPath,pre:[script]}, {args:[],cwd,timeoutMs:2000,kill:p=>p.kill(),input:{type:'user',message:{role:'user',content:'FIRST'}},onLine:l=>events.push(JSON.parse(l)),onReady:fn=>{if(fn&&!once){once=true;receipt=fn('GREEN');}}});
+  await receipt;assert.equal(result.code,0);assert.equal(events.at(-1).result,'GREEN');
+});

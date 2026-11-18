@@ -4,6 +4,8 @@ Notable changes per repository version.
 
 ## Unreleased
 
+- Accept non-interrupting additions before CLI readiness and deliver them in order with retry deduplication and visible status. Keep Claude alive for queued input after its first result; wait for AGY activity before sending additions.
+
 - Show the CLI-provided Claude model name in the selected field while preserving its execution alias.
 
 - Refresh CLI model lists when opening room settings and render the refreshed seat metadata, including newly available AGY Hydrogen models. Preserve existing choices on discovery failure.

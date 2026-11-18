@@ -583,3 +583,5 @@ Codex 0.165.0, 같은 세션에서 일반/Fast 요청 각 2회. 일반 21.899초
 Refresh CLI model lists when opening room settings and render the refreshed seat metadata, including newly available AGY Hydrogen models. Preserve existing choices on discovery failure.
 
 Show the CLI-provided Claude model name in the selected field while preserving its execution alias.
+
+Accept non-interrupting additions before CLI readiness and deliver them in order with retry deduplication and visible status. Keep Claude alive for queued input after its first result; wait for AGY activity before sending additions.

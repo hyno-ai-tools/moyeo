@@ -33,6 +33,7 @@ import { normalizeProjectDirs, projectLinksStatus, sameProjectPath } from "./lib
 import { buildCodexInvocationArgs } from "./lib/codex-command.mjs";
 import { runCodexLive } from "./lib/codex-live.mjs";
 import { closeLiveConnections } from "./lib/live-pool.mjs";
+import { orderedDelivery } from "./lib/ordered-delivery.mjs";
 import { runClaudeLive, runAgyLive } from "./lib/provider-live.mjs";
 import { workStatus } from "./lib/work-status.mjs";
 import { codexTurnUsage } from "./lib/codex-usage.mjs";
@@ -1256,6 +1257,7 @@ function liveRunOptions(room, seat) {
     },
     onReady: steer => {
       if (run) run.steer = run.stopRequested ? null : steer;
+      room.liveAdjustments?.kick();
       broadcast(room, { type: "room", room: roomSummary(room) });
     },
   };
@@ -1810,6 +1812,8 @@ async function claudeSend(room, { seat = "claude", prompt, briefing, onStream, o
   };
 
   const useLive = liveRunAllowed(room, seat, cfg.command, 'claude');
+  if (room.runs.get(seat)) room.runs.get(seat).liveCapable = useLive;
+  room.liveAdjustments?.kick();
   let r;
   if (useLive) {
     if (!args.includes('--input-format')) args.push('--input-format', 'stream-json');
@@ -1957,6 +1961,8 @@ async function codexSend(room, { seat = "codex", prompt, briefing, onStream, onA
   // original transport. Such calls deliberately expose no live-steering hook.
   const run = room.runs.get(seat);
   const useLive = /^(codex)(\.(cmd|exe|ps1|js))?$/i.test(path.basename(cfg.command)) && extraArgs.length === 0 && sess !== "--last";
+  if (run) run.liveCapable = useLive;
+  room.liveAdjustments?.kick();
   const liveConfig = {};
   if (browserConnection) {
     const browserArgs = browserCliArgs("codex");
@@ -1976,6 +1982,7 @@ async function codexSend(room, { seat = "codex", prompt, briefing, onStream, onA
       onChild: child => { room.procs.set(seat, child); if (run) run.child = child; },
       onReady: steer => {
         if (run) run.steer = steer;
+        room.liveAdjustments?.kick();
         broadcast(room, { type: "room", room: roomSummary(room) });
       },
     }) : await runCli(resolveCommand(cfg.command), args, {
@@ -2060,6 +2067,8 @@ async function agySend(room, { seat = "gemini", prompt, briefing, onStream, onAc
   // settings retain their old transport rather than silently losing options.
   const useLive = liveRunAllowed(room, seat, cfg.command, 'agy') && extraArgs.length === 0 &&
     (!browserSettings || approval === 'full');
+  if (room.runs.get(seat)) room.runs.get(seat).liveCapable = useLive;
+  room.liveAdjustments?.kick();
   try {
     if (browserSettings && !useLive) {
       settingsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'parley-agy-permissions-'));
@@ -6350,7 +6359,7 @@ function maybeRunCatchUp(room, agent) {
 //   { seq, kind: "delivery", agents: [agent],  gen, stopAt, run, abandon }
 //   { seq, kind: "cycle",    agents: allSeats, gen, stopAt, run, abandon, pairTurn }
 
-function queueSize(room) { return room.pending.length; }
+function queueSize(room) { return room.pending.length + (room.liveAdjustments?.size() || 0); }
 
 // One row per still-pending delivery, carrying the two ids the queue view
 // needs and keeping them separate on purpose: `queueGroupId` is the cancel
@@ -6627,6 +6636,7 @@ function releaseSeat(room, agent, run = null) {
   // Accept the correction before the old coordinator gets its next microtask,
   // but after its done event so it cannot remove the new response's live card.
   flushAdjustment(room);
+  room.liveAdjustments?.kick();
   broadcast(room, { type: "room", room: roomSummary(room) });
   // Deferred by a tick so the turn that just ended finishes unwinding first.
   // Seat waiters (hops, pair steps) are woken only AFTER the drain has had its
@@ -6641,6 +6651,7 @@ function releaseSeat(room, agent, run = null) {
 }
 
 function clearPending(room) {
+  room.liveAdjustments?.cancel();
   room.adjustmentDraft = null;
   const held = room.pending;
   room.pending = [];
@@ -6654,17 +6665,19 @@ function clearPending(room) {
 // coordinator is awaiting, so the chain closes out rather than hanging on a
 // delivery that will never run.
 function cancelQueued(room, groupId = null) {
+  const liveCount = groupId === null ? (room.liveAdjustments?.size() || 0) : 0;
+  if (groupId === null) room.liveAdjustments?.cancel();
   const draftCount = groupId === null && room.adjustmentDraft ? 1 : 0;
   if (draftCount) {
     room.adjustmentDraft = null;
     broadcast(room, { type: "room", room: roomSummary(room) });
   }
-  if (!room.pending.length) return draftCount;
+  if (!room.pending.length) return draftCount + liveCount;
   const keep = [], drop = [];
   for (const item of room.pending) {
     (groupId === null || item.queueGroupId === groupId ? drop : keep).push(item);
   }
-  if (!drop.length) return draftCount;
+  if (!drop.length) return draftCount + liveCount;
   room.pending = keep;
   broadcastQueue(room);
   for (const item of drop) item.abandon();
@@ -6675,7 +6688,7 @@ function cancelQueued(room, groupId = null) {
   // the room then know the message was withdrawn before anyone received it.
   recordWithdrawals(room, drop);
   scheduleCatchUps(room);
-  return drop.length + draftCount;
+  return drop.length + draftCount + liveCount;
 }
 
 // Durable, per message and per seat. A system entry alone would not do: only
@@ -7154,7 +7167,7 @@ function commitAdjustment(room, draft) {
 
 function flushAdjustment(room) {
   const draft = room.adjustmentDraft;
-  if (!draft || draft.error || draft.delivering) return;
+  if (!draft || draft.error || draft.delivering || room.liveAdjustments?.size()) return;
   if (draft.gen !== room.generation || draft.stopAt !== room.stopEpoch ||
       draft.runs.some(run => run.stopRequested || run.chain?.halted)) {
     room.adjustmentDraft = null;
@@ -7169,9 +7182,79 @@ function flushAdjustment(room) {
   }
 }
 
+async function deliverLiveAddition(room, draft, run) {
+  const id = draft.id;
+  // Resolve skills before writing to the live connection.
+  const selectedSkill = extractSkillMessage(draft.text, run.agent);
+  if (selectedSkill) {
+    const provider = providerIdOf(room, run.agent);
+    await providerToolCatalog(room, provider, { refresh: true });
+    selectedSkill.path = skillDocumentPaths.get(`${provider}\0${workDir(room)}\0${selectedSkill.name}`);
+  }
+  const liveText = applySkillInvocationPrompt(providerIdOf(room, run.agent), selectedSkill, selectedSkill?.text || draft.text);
+  if (room.runs.get(run.agent) !== run || !run.steer || run.stopRequested) {
+    if (draft.stopAt !== room.stopEpoch || run.stopRequested) throw new Error('작업이 중단되었습니다.');
+    return { ...handleAsk(room, adjustmentOptions(draft)), live: false };
+  }
+  const receipt = await run.steer(liveText + "\n\n" + liveAdjustmentInstructions(room.cfg.communicationMode, id), id);
+  const entry = appendEntry(room, { kind: "user", author: "user", target: run.agent, text: draft.text,
+    meta: { liveSession: receipt.threadId, audience: { addressed: [run.agent], lurking: [] },
+      askFrom: { sourceN: draft.sourceN, adjustment: true, adjustmentId: id, live: true,
+        continuesRunIds: [run.runId], nativeTurnId: receipt.turnId } } });
+  appendReceipt(room, { agent: run.agent, from: entry.n - 1, upTo: entry.n, turn: draft.sourceN, mode: "turn" });
+  broadcast(room, { type: "room", room: roomSummary(room) });
+  return { sent: true, live: true, n: entry.n };
+
+}
+function liveAdditionQueue(room) {
+  if (room.liveAdjustments) return room.liveAdjustments;
+  return room.liveAdjustments = orderedDelivery({
+    ready(item) {
+      const d = item.draft;
+      if (item.cancelled || d.gen !== room.generation || d.stopAt !== room.stopEpoch ||
+          d.runs.some(r => r.stopRequested || r.chain?.halted)) return { cancelled: true };
+      const targets = d.target === 'both' ? seatIds(room) : [d.target];
+      const active = targets.map(agent => d.runs.find(r => r.agent === agent && room.runs.get(agent) === r));
+      if (active.some(r => r && !r.steer && r.liveCapable !== false)) return null;
+      return { targets, active };
+    },
+    async deliver(item, route) {
+      // Process targets in order; never replay a target after an uncertain acknowledgement.
+      for (let i = 0; i < route.targets.length; i++) {
+        if (item.cancelled || item.draft.gen !== room.generation || item.draft.stopAt !== room.stopEpoch) {
+          throw new Error('추가 지시 전달이 중단되었습니다.');
+        }
+        const target = route.targets[i], run = route.active[i];
+        const draft = { ...item.draft, target };
+        if (run && room.runs.get(target) === run && run.steer && !run.stopRequested) {
+          const result = await deliverLiveAddition(room, draft, run);
+          if (!result.live) item.followup = true;
+        } else {
+          handleAsk(room, adjustmentOptions(draft));
+          item.followup = true;
+        }
+      }
+    },
+    notify(item) {
+      const label = item.status === 'queued' ? '추가 지시 접수 · 연결 준비와 전달 순서를 기다립니다.'
+        : item.status === 'failed' ? '추가 지시 전달 확인 실패 · 중복 실행을 피하려고 재전송하지 않았습니다. 모델 답변을 확인해 주세요.'
+        : item.status === 'cancelled' ? '대기 중인 추가 지시 전달이 취소되었습니다.'
+        : item.followup ? '추가 지시를 후속 작업으로 전달했습니다.' : '추가 지시를 진행 중인 작업에 전달했습니다.';
+      appendEntry(room, { kind: 'system', author: 'system', text: label + (item.status === "failed" || item.status === "cancelled" ? "\n" + item.draft.text : ""),
+        meta: { addition: { id: item.id, status: item.status, text: item.draft.text, target: item.draft.target } } });
+      if (item.status === "delivered") flushAdjustment(room);
+      broadcast(room, { type: 'room', room: roomSummary(room) });
+    },
+  });
+}
+
 async function handleAdjustment(room, body) {
   const id = String(body.id || "");
   if (!/^[\w-]{1,80}$/.test(id)) throw Object.assign(new Error("invalid adjustment id"), { status: 400 });
+  const queued = room.liveAdjustments?.get(id);
+  if (queued && (body.action === 'send' || body.action === 'stage')) {
+    return { accepted: true, queued: queued.status === 'queued' || queued.status === 'delivering', status: queued.status, draft: null };
+  }
   const existing = room.adjustmentDraft;
   const delivered = room.entries.find(entry => entry.kind === "user" && entry.meta?.askFrom?.adjustmentId === id);
   if (body.action === "send" && delivered) return { sent: true, n: delivered.n };
@@ -7182,36 +7265,9 @@ async function handleAdjustment(room, body) {
     }
     if (body.action === "send") {
       if (existing.deliveryUncertain) throw Object.assign(new Error("전달 여부를 확인하지 못했습니다. 모델 답변을 확인한 후 삭제하거나 새 지시를 작성해 주세요."), { status: 409 });
-      const targets = existing.target === "both" ? seatIds(room) : [existing.target];
-      const active = targets.map(agent => existing.runs.find(run => run.agent === agent && room.runs.get(agent) === run));
-      if (active.length !== 1 || !active[0]?.steer || active[0].stopRequested) {
-        throw Object.assign(new Error("현재 작업에 즉시 추가할 수 없는 대상입니다. 연결 준비가 끝난 모델 하나를 선택해 주세요. 자동 대기는 그대로 유지됩니다."), { status: 409 });
-      }
-      const run = active[0];
-      existing.delivering = true;
-      try {
-        // Keep automatic flushing locked until the native turn acknowledges.
-        const selectedSkill = extractSkillMessage(existing.text, run.agent);
-        if (selectedSkill) {
-          const provider = providerIdOf(room, run.agent);
-          await providerToolCatalog(room, provider, { refresh: true });
-          selectedSkill.path = skillDocumentPaths.get(`${provider}\0${workDir(room)}\0${selectedSkill.name}`);
-        }
-        const liveText = applySkillInvocationPrompt(providerIdOf(room, run.agent), selectedSkill, selectedSkill?.text || existing.text);
-        const receipt = await run.steer(liveText + "\n\n" + liveAdjustmentInstructions(room.cfg.communicationMode, id), id);
-        const entry = appendEntry(room, { kind: "user", author: "user", target: run.agent, text: existing.text,
-          meta: { liveSession: receipt.threadId, audience: { addressed: [run.agent], lurking: [] },
-            askFrom: { sourceN: existing.sourceN, adjustment: true, adjustmentId: id, live: true,
-              continuesRunIds: [run.runId], nativeTurnId: receipt.turnId } } });
-        appendReceipt(room, { agent: run.agent, from: entry.n - 1, upTo: entry.n, turn: existing.sourceN, mode: "turn" });
-        room.adjustmentDraft = null;
-        broadcast(room, { type: "room", room: roomSummary(room) });
-        return { sent: true, live: true, n: entry.n };
-      } catch (error) {
-        existing.error = "추가 지시 전달을 확인하지 못했습니다. 모델 답변을 확인해 주세요.";
-        existing.deliveryUncertain = true;
-        throw error;
-      } finally { existing.delivering = false; }
+      room.adjustmentDraft = null;
+      liveAdditionQueue(room).add({ id, draft: existing });
+      return { accepted: true, queued: true };
     }
     room.adjustmentDraft = null;
     broadcast(room, { type: "room", room: roomSummary(room) });

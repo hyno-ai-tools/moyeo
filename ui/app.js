@@ -4149,10 +4149,8 @@ function renderAdjustmentDraft() {
   $("adjustDraftEdit").disabled = draftSending;
   $("adjustDraftDelete").disabled = draftSending || state.sending;
   if (!draft) return;
-  const liveTarget = resolvedAdjustmentTarget(draft);
-  const liveRun = (state.summary?.busyInfo || []).find(run => run.agent === liveTarget && run.rootN === draft.sourceN);
-  $("adjustDraftSendNow").disabled = draftSending || state.sending || !liveRun?.liveSteering;
-  $("adjustDraftSendNow").title = t(liveRun?.liveSteering ? "adjust.liveHelp" : "adjust.liveUnavailable");
+  $("adjustDraftSendNow").disabled = draftSending || state.sending;
+  $("adjustDraftSendNow").title = t("adjust.liveHelp");
   $("adjustDraftStatus").textContent = draft.error || t(draft.saving ? "adjust.sending" : "adjust.waiting");
   $("adjustDraftPreview").textContent = draft.text;
   const seats = state.summary?.seats || [];
@@ -4268,7 +4266,10 @@ async function changeAdjustment(action) {
 }
 
 async function sendAdjustmentDraft() {
-  if (state.adjustDraft?.unsaved) return saveAdjustmentDraft();
+  if (state.adjustDraft?.unsaved) {
+    await saveAdjustmentDraft();
+    if (!state.adjustDraft || state.adjustDraft.unsaved) return;
+  }
   return changeAdjustment("send");
 }
 
