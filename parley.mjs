@@ -520,19 +520,19 @@ function normalizeChoices(list, labels) {
 
 let catalogCache = null;
 const cliCatalogCache = new Map();
-function seatModels(room, seat) {
+function seatModels(room, seat, refresh = false) {
   const provider = providerIdOf(room, seat);
   if (!["claude", "gemini"].includes(provider)) return null;
   const command = room.cfg.agents[seat].command;
   const cwd = workDir(room);
   const key = JSON.stringify([provider, command, cwd]);
-  if (!cliCatalogCache.has(key)) {
-    const record = { models: null };
+  if (!cliCatalogCache.has(key) || (refresh && !cliCatalogCache.get(key).loading)) {
+    const record = { models: cliCatalogCache.get(key)?.models || null, loading: true };
     cliCatalogCache.set(key, record);
     record.pending = discoverCliModels(provider, resolveCommand(command), cwd).then(models => {
-      record.models = models.length ? models : null;
+      record.models = models.length ? models : record.models;
       return record.models;
-    }).catch(() => null);
+    }).catch(() => record.models).finally(() => { record.loading = false; });
   }
   return cliCatalogCache.get(key);
 }
@@ -8263,7 +8263,7 @@ const server = http.createServer(async (req, res) => {
     if (route === "GET /api/rooms") return json(res, 200, { rooms: roomsWithModes(), providers: providerCatalog() });
     if (route === "GET /api/models") {
       const room = loadRoom(url.searchParams.get("room"));
-      await Promise.all(seatIds(room).map(seat => seatModels(room, seat)?.pending));
+      await Promise.all(seatIds(room).map(seat => seatModels(room, seat, true)?.pending));
       return json(res, 200, { seatInfo: seatCatalog(room) });
     }
 

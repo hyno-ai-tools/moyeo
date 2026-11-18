@@ -5814,11 +5814,12 @@ function openSettings(create = false) {
   $("overlay").classList.add("open");
   $("s_roomName").focus();
   if (settingsCreating) return;
-  // Cached CLI metadata, warmed when the room loads. Never overwrite form edits.
+  // Refresh CLI metadata without overwriting in-progress form edits.
   refreshSeatModels(s).then(updated => {
     if (!updated || !$("overlay").classList.contains("open") || settingsContext !== s || settingsCreating) return;
     captureSeatDraftValues();
-    renderSeatCards(settingsContext || state.summary);
+    settingsContext = { ...settingsContext, seatInfo: state.summary.seatInfo };
+    renderSeatCards(settingsContext);
   }).catch(() => { /* Free-form model input remains available. */ });
 }
 $("mImportSettings").onclick = async () => {
