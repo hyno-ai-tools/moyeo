@@ -7563,8 +7563,7 @@ function pickerCancelled(code, err) {
   return code === 1;
 }
 
-function pickFolder(start, kind = "folder", multiple = false) {
-  multiple = multiple && kind === "folder";
+function pickFolder(start, kind = "folder") {
   return new Promise((resolve) => {
     let cmd, args;
     if (IS_WIN) {
@@ -7573,18 +7572,15 @@ function pickFolder(start, kind = "folder", multiple = false) {
       // lets the script run on to exit 0, which is indistinguishable from a
       // cancel. Terminating on the first error makes failure visible.
       const pickerSource = fs.readFileSync(new URL("./lib/native-picker.ps1", import.meta.url), "utf8");
-      const script = `$parleyPickerKind = '${kind === "vscode" ? "vscode" : "folder"}'\n$parleyPickerStart = '${s}'\n$parleyPickerMultiple = ${multiple ? '$true' : '$false'}\n${pickerSource}`;
+      const script = `$parleyPickerKind = '${kind === "vscode" ? "vscode" : "folder"}'\n$parleyPickerStart = '${s}'\n${pickerSource}`;
       cmd = "powershell.exe";
       args = ["-NoProfile", "-STA", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")];
     } else if (process.platform === "darwin") {
       cmd = "osascript";
-      args = ["-e", multiple
-        ? 'set folders to choose folder with prompt "Choose project folders" with multiple selections allowed\nset resultText to ""\nrepeat with folderItem in folders\nset resultText to resultText & POSIX path of folderItem & linefeed\nend repeat\nreturn resultText'
-        : 'POSIX path of (choose folder with prompt "Choose a project folder for this MoYEO room")'];
+      args = ["-e", 'POSIX path of (choose folder with prompt "Choose a project folder for this MoYEO room")'];
     } else {
       cmd = "zenity";
       args = ["--file-selection", "--directory", "--title=Choose a project folder for this MoYEO room"];
-      if (multiple) args.push("--multiple", "--separator=\n");
     }
     let child;
     try {
@@ -7617,14 +7613,6 @@ function pickFolder(start, kind = "folder", multiple = false) {
         if (pickerCancelled(code, err)) return resolve({ cancelled: true });
         const why = err.trim().split(/\r?\n/).filter(Boolean)[0];
         return resolve({ error: `the folder picker failed (exit ${code}${why ? `: ${why.slice(0, 160)}` : ""}) — type the path instead` });
-      }
-      if (multiple) {
-        try {
-          const selected = IS_WIN ? (out.trim() ? JSON.parse(out.trim()) : []) : out.trim().split(/\r?\n/).filter(Boolean);
-          if (!Array.isArray(selected) || selected.some(value => typeof value !== "string" || !value.trim())) throw new Error("Invalid folder selection");
-          const paths = [...new Set(selected.map(value => path.resolve(value)))];
-          return resolve(paths.length ? { paths } : { cancelled: true });
-        } catch { return resolve({ error: "Could not read selected folders. Please try again." }); }
       }
       const picked = out.trim().split(/\r?\n/).filter(Boolean).pop();
       resolve(picked ? { path: path.resolve(picked) } : { cancelled: true });
@@ -8438,8 +8426,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (route === "POST /api/pickfolder") {
-      const { start, multiple } = await readBody(req);
-      return json(res, 200, await pickFolder(start, "folder", multiple === true));
+      const { start } = await readBody(req);
+      return json(res, 200, await pickFolder(start));
     }
 
     if (route === "POST /api/pick-vscode") {
