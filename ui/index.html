@@ -153,7 +153,8 @@
         <div class="box">
           <input id="fileInput" type="file" multiple hidden aria-label="Choose files to attach">
           <button id="attachBtn" type="button" title="Attach files" aria-label="Attach files" data-i18n-title="composer.attachFiles" data-i18n-aria-label="composer.attachFiles">📎</button>
-          <textarea id="input" rows="1" placeholder="Message the table…  (@claude, @codex, @both)" data-i18n-placeholder="composer.placeholder"></textarea>
+          <button type="button" id="messageSuggestionHint" class="hbtn" hidden data-i18n="suggestions.accept" title="Tab">Tab · 제안 넣기</button>
+            <textarea id="input" rows="1" placeholder="Message the table…  (@claude, @codex, @both)" data-i18n-placeholder="composer.placeholder"></textarea>
           <div id="stopWrap">
             <button id="stopBtn" title="Stop the running response" data-i18n-title="stop.response">■</button>
             <button id="stopMore" title="Choose what to stop" aria-label="Stop options" data-i18n-title="stop.options" data-i18n-aria-label="stop.options"
@@ -233,6 +234,7 @@
   <div class="fld"><label for="s_fontSize" data-i18n="appSettings.size">Chat text size</label><select id="s_fontSize"><option value="14">14px</option><option value="15">15px</option><option value="16">16px</option><option value="17">17px</option><option value="18">18px</option></select></div>
   <div class="fld"><label for="s_locale" data-i18n="language.label">Language</label><select id="s_locale"><option value="ko">한국어</option><option value="en">English</option></select></div>
   <div class="fld"><label data-i18n="theme.label">Theme</label><div id="themeToggle" role="group"><button type="button" data-theme-choice="dark" data-i18n="theme.dark">Dark</button><button type="button" data-theme-choice="light" data-i18n="theme.light">Light</button></div></div>
+  <div class="fld"><label><input type="checkbox" id="s_messageSuggestions"> <span data-i18n="suggestions.setting">Next message suggestions</span></label><small data-i18n="suggestions.help">Uses this room's main CLI after a reply. Additional CLI usage applies. Tab fills the input; Enter sends.</small></div>
   <div id="fontPreview" data-i18n="appSettings.preview">Readable conversations, comfortable work. ABC 123</div>
  </div>
 </div>
@@ -337,6 +339,7 @@
 <script src="/ui/panel-preview.js?v=__PARLEY_ASSET_VERSION__"></script>
 <script src="/ui/work-panel.js?v=__PARLEY_ASSET_VERSION__"></script>
 <script src="/ui/shared-browser.js?v=__PARLEY_ASSET_VERSION__"></script>
+<script src="/ui/message-suggestions.js?v=__PARLEY_ASSET_VERSION__"></script>
 <script src="/ui/app.js?v=__PARLEY_ASSET_VERSION__"></script>
 
 </body>

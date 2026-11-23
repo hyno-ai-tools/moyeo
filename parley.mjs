@@ -33,6 +33,7 @@ import { normalizeProjectDirs, projectLinksStatus, sameProjectPath } from "./lib
 import { buildCodexInvocationArgs } from "./lib/codex-command.mjs";
 import { runCodexLive } from "./lib/codex-live.mjs";
 import { closeLiveConnections } from "./lib/live-pool.mjs";
+import { suggestionContext, suggestionInvocation, suggestionResult, createSuggestionCache } from "./lib/message-suggestions.mjs";
 import { prepareCodexHome } from "./lib/codex-home.mjs";
 import { orderedDelivery } from "./lib/ordered-delivery.mjs";
 import { runClaudeLive, runAgyLive } from "./lib/provider-live.mjs";
@@ -1696,6 +1697,41 @@ function codexItemLabel(item) {
 }
 
 /** Claude Code CLI: print mode + stream-json for live partial text. */
+const messageSuggestions = createSuggestionCache();
+async function suggestMessage(room) {
+  const idle = () => !room.busy.size && !room.exchanges && !room.pairActive && !queueSize(room);
+  if (!idle()) return { text: '' };
+  const context = suggestionContext(room);
+  if (!context) return { text: '' };
+  const text = await messageSuggestions.get(context.key, async () => {
+    const provider = providerIdOf(room, context.seat);
+    const command = resolveCommand(context.config.command);
+    if (command.error) return '';
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'moyeo-suggestion-'));
+    const output = path.join(dir, 'reply.txt');
+    try {
+      let env = process.env;
+      if (provider === 'codex') {
+        // Isolate transient suggestions from both room and desktop transcripts,
+        // workspace instructions, MCP configuration and plugins.
+        const runtime = prepareCodexHome(ROOT);
+        const home = path.join(dir, 'codex');
+        fs.mkdirSync(home);
+        const auth = path.join(runtime.home, 'auth.json');
+        if (fs.existsSync(auth)) fs.copyFileSync(auth, path.join(home, 'auth.json'));
+        env = { ...process.env, CODEX_HOME: home, CODEX_SQLITE_HOME: home };
+      }
+      const result = await runCli(command, suggestionInvocation(provider, context.config.model, output), {
+        cwd: dir, env, timeoutMs: 45000, input: provider === 'gemini'
+          ? JSON.stringify({ event: 'user', message: { content: context.prompt } }) + '\n' : context.prompt,
+      });
+      if (result.code !== 0 || result.timedOut || result.spawnError) return '';
+      return suggestionResult(provider, result.stdout, provider === 'codex' && fs.existsSync(output) ? fs.readFileSync(output, 'utf8') : '');
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+  return { text: idle() && suggestionContext(room)?.key === context.key ? text : '', lastN: context.lastN, seat: context.seat };
+}
+
 async function claudeSend(room, { seat = "claude", prompt, briefing, onStream, onActivity, onProgress, discussion, readOnly, images = [], inputDir = null, allowEmpty = false, browserConnection = null }) {
   const cfg = room.cfg.agents[seat];
   const protectedTurn = !!(discussion || readOnly) && !fullAccessEnabled(room, seat);
@@ -8312,12 +8348,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (route === "GET /api/service/status") {
       return json(res, 200, { ...service.info, version: SERVICE_VERSION,
-        busy: [...rooms.values()].some((room) => room.busy.size || room.exchanges > 0 || room.pairActive || queueSize(room)) });
+        busy: messageSuggestions.busy || [...rooms.values()].some((room) => room.busy.size || room.exchanges > 0 || room.pairActive || queueSize(room)) });
     }
     if (route === "POST /api/service/stop") {
       const body = await readBody(req);
       if (body.instance !== service.info.instance) return json(res, 409, { error: "서버 정보가 변경되었습니다. 다시 확인하세요." });
-      if (updateApplying || [...rooms.values()].some((room) => room.busy.size || room.exchanges > 0 || room.pairActive || queueSize(room))) {
+      if (updateApplying || messageSuggestions.busy || [...rooms.values()].some((room) => room.busy.size || room.exchanges > 0 || room.pairActive || queueSize(room))) {
         return json(res, 409, { error: "진행 중이거나 대기 중인 작업이 있습니다. 작업 완료 또는 화면에서 작업 중지 후 다시 실행하세요." });
       }
       serviceStopping = true;
@@ -8584,6 +8620,13 @@ const server = http.createServer(async (req, res) => {
       const ping = setInterval(() => { try { res.write(":ping\n\n"); } catch { /* closed */ } }, 20000);
       req.on("close", () => { clearInterval(ping); room.clients.delete(res); });
       return;
+    }
+
+    if (route === "POST /api/message-suggestion") {
+      if (updateApplying || serviceStopping) return json(res, 409, { error: "Service maintenance in progress" });
+      const body = await readBody(req);
+      const room = loadRoom(body.room || "default");
+      return json(res, 200, await suggestMessage(room));
     }
 
     if (route === "POST /api/adjustment") {

@@ -34,6 +34,7 @@ function rememberHopChoice(room, choice) {
   try { sessionStorage.setItem(hopChoiceStorageKey(room), choice); }
   catch { /* storage may be unavailable; the current page still stays sticky */ }
 }
+let messageSuggestions = null;
 const state = {
   room: INITIAL_ROOM,
   entries: [],
@@ -2470,6 +2471,7 @@ function applySummary(s) {
     if (!s.busy.includes(agent)) removeLive(agent);
   }
   state.summary = s;
+  messageSuggestions?.update(finishedWork);
   if (finishedWork) renderAll({ stickToBottom: nearBottom(), anchor: true });
   state.providers = s.providers || state.providers;
   injectSeatStyles();
@@ -3183,6 +3185,7 @@ function setQueue(n, items, dispatches, paused) {
   // it goes stale the moment the queue moves — including when the queue drains
   // on its own, with no status or summary event behind it.
   updateBusyUI();
+  messageSuggestions?.update(n <= 0);
 }
 function closeQueuePop() {
   const wrap = $("queueWrap");
@@ -3696,6 +3699,7 @@ function connect(resyncOnOpen = false) {
         if (pill) pill.classList.toggle("busy", state.summary.busy.includes(msg.agent));
         updateBusyUI();
       }
+      messageSuggestions?.update(msg.phase === "done");
       if (msg.phase === "retrying") {
         const l = ensureLive(msg.agent, msg.startedAt);
         l.el.querySelector(".live-label").innerHTML = `${esc(t("live.restoring"))} <span class="elapsed">${elapsedLabel(l)}</span>`;
@@ -3783,6 +3787,7 @@ async function openAvailableRoom(preferred) {
   await refreshRooms();
 }
 async function loadRoom(name) {
+  messageSuggestions?.clear();
   $("pills").querySelectorAll(".seat-error.open").forEach(box => window.ParleySeatErrors.setPopoverOpen(box, false));
   closeConnectionMenu(false);
   retireProjectPick(); // a folder dialog open for the old room must not land here
@@ -3982,6 +3987,7 @@ function nativeImageMime(file) {
 }
 
 function renderDraftAttachments() {
+  messageSuggestions?.clear();
   const row = $("draftImages");
   row.innerHTML = "";
   row.classList.toggle("show", draftAttachmentCount() > 0);
@@ -4368,6 +4374,7 @@ async function handleSlash(text) {
 }
 
 async function send() {
+  messageSuggestions?.clear();
   const text = input.value.trim();
   const imageDrafts = [...state.draftImages];
   const fileDrafts = [...state.draftFiles];
@@ -6343,3 +6350,17 @@ $("seatCards").addEventListener("drop", event => {
   draggedSeatId = null;
 });
 $("seatCards").addEventListener("dragend", () => { draggedSeatId = null; });
+
+messageSuggestions = window.MoyeoMessageSuggestions({
+  input, toggle: $('s_messageSuggestions'), hint: $('messageSuggestionHint'),
+  request: room => api('/api/message-suggestion', { room }),
+  snapshot: () => {
+    const s = state.summary;
+    const last = state.entries.findLast(e => ['user', 'agent'].includes(e.kind) && e.text?.trim());
+    return { room: state.room, lastN: last?.n,
+      key: JSON.stringify([state.room, last?.n, s?.cfg?.defaultAgent, s?.cfg?.agents]),
+      attachments: state.draftImages.length + state.draftFiles.length,
+      ready: !state.sending && last?.kind === 'agent' && s?.name === state.room && !s.busy?.length && !s.continuingRunIds?.length && !state.queue.length,
+    };
+  },
+});

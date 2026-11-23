@@ -5,6 +5,9 @@
     en: {
       "history.more": "Earlier messages ↑",
       "history.moreHint": "Show {count} earlier entries",
+      "suggestions.setting": "Next message suggestions",
+      "suggestions.help": "Uses this room's main CLI after a reply (additional usage). Tab fills the input; Enter sends. Off by default.",
+      "suggestions.accept": "Tab · Use suggestion",
       "appSettings.title": "App settings",
       "appSettings.font": "Font",
       "appSettings.size": "Chat text size",
@@ -593,6 +596,9 @@
     ko: {
       "history.more": "이전 대화 보기 ↑",
       "history.moreHint": "이전 기록 {count}개 표시",
+      "suggestions.setting": "다음 메시지 추천",
+      "suggestions.help": "답변 후 이 방의 주도 CLI로 추천해요 (추가 사용량 발생). Tab으로 입력하고 Enter로 전송해요. 기본값은 꺼짐이에요.",
+      "suggestions.accept": "Tab · 제안 넣기",
       "appSettings.title": "앱 설정",
       "appSettings.font": "글꼴",
       "appSettings.size": "대화 글자 크기",
