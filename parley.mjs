@@ -157,7 +157,12 @@ const MAX_CLI_LINE_BYTES = 20_000_000;
 
 const argv = process.argv.slice(2);
 repairCommandAliases(fileURLToPath(import.meta.url));
-if (["start", "stop", "restart", "status"].includes(argv[0])) {
+if (argv[0] === "update") {
+  try {
+    const { updateClis } = await import("./lib/update-clis.mjs");
+    await updateClis(argv.slice(1), fileURLToPath(import.meta.url));
+  } catch (error) { console.error(error.message); process.exitCode = 1; }
+} else if (["start", "stop", "restart", "status"].includes(argv[0])) {
   try { await serviceCommand(argv[0], argv.slice(1), fileURLToPath(import.meta.url)); }
   catch (error) { console.error(error.message); process.exitCode = 1; }
 } else {
@@ -185,6 +190,7 @@ Usage: moyeo [--port N] [--root DIR] [--no-open] [--version]
   moyeo stop     대화·설정을 유지하며 종료 (작업 중이면 거부)
   moyeo restart  서버 재시작
   moyeo status   실행 상태 확인
+  moyeo update <codex|claude|agy|all>  CLI 업데이트 (작업 중이면 거부)
   npm run setup  전역 명령 및 사용자 PATH 등록 (설치 폴더에서 최초 1회)
 
   --port N     Port to serve the UI on (default 4141, auto-increments if busy;
@@ -7557,7 +7563,8 @@ function pickerCancelled(code, err) {
   return code === 1;
 }
 
-function pickFolder(start, kind = "folder") {
+function pickFolder(start, kind = "folder", multiple = false) {
+  multiple = multiple && kind === "folder";
   return new Promise((resolve) => {
     let cmd, args;
     if (IS_WIN) {
@@ -7566,15 +7573,18 @@ function pickFolder(start, kind = "folder") {
       // lets the script run on to exit 0, which is indistinguishable from a
       // cancel. Terminating on the first error makes failure visible.
       const pickerSource = fs.readFileSync(new URL("./lib/native-picker.ps1", import.meta.url), "utf8");
-      const script = `$parleyPickerKind = '${kind === "vscode" ? "vscode" : "folder"}'\n$parleyPickerStart = '${s}'\n${pickerSource}`;
+      const script = `$parleyPickerKind = '${kind === "vscode" ? "vscode" : "folder"}'\n$parleyPickerStart = '${s}'\n$parleyPickerMultiple = ${multiple ? '$true' : '$false'}\n${pickerSource}`;
       cmd = "powershell.exe";
       args = ["-NoProfile", "-STA", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")];
     } else if (process.platform === "darwin") {
       cmd = "osascript";
-      args = ["-e", 'POSIX path of (choose folder with prompt "Choose a project folder for this MoYEO room")'];
+      args = ["-e", multiple
+        ? 'set folders to choose folder with prompt "Choose project folders" with multiple selections allowed\nset resultText to ""\nrepeat with folderItem in folders\nset resultText to resultText & POSIX path of folderItem & linefeed\nend repeat\nreturn resultText'
+        : 'POSIX path of (choose folder with prompt "Choose a project folder for this MoYEO room")'];
     } else {
       cmd = "zenity";
       args = ["--file-selection", "--directory", "--title=Choose a project folder for this MoYEO room"];
+      if (multiple) args.push("--multiple", "--separator=\n");
     }
     let child;
     try {
@@ -7607,6 +7617,14 @@ function pickFolder(start, kind = "folder") {
         if (pickerCancelled(code, err)) return resolve({ cancelled: true });
         const why = err.trim().split(/\r?\n/).filter(Boolean)[0];
         return resolve({ error: `the folder picker failed (exit ${code}${why ? `: ${why.slice(0, 160)}` : ""}) — type the path instead` });
+      }
+      if (multiple) {
+        try {
+          const selected = IS_WIN ? (out.trim() ? JSON.parse(out.trim()) : []) : out.trim().split(/\r?\n/).filter(Boolean);
+          if (!Array.isArray(selected) || selected.some(value => typeof value !== "string" || !value.trim())) throw new Error("Invalid folder selection");
+          const paths = [...new Set(selected.map(value => path.resolve(value)))];
+          return resolve(paths.length ? { paths } : { cancelled: true });
+        } catch { return resolve({ error: "Could not read selected folders. Please try again." }); }
       }
       const picked = out.trim().split(/\r?\n/).filter(Boolean).pop();
       resolve(picked ? { path: path.resolve(picked) } : { cancelled: true });
@@ -8420,8 +8438,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (route === "POST /api/pickfolder") {
-      const { start } = await readBody(req);
-      return json(res, 200, await pickFolder(start));
+      const { start, multiple } = await readBody(req);
+      return json(res, 200, await pickFolder(start, "folder", multiple === true));
     }
 
     if (route === "POST /api/pick-vscode") {
