@@ -234,7 +234,17 @@
   <div class="fld"><label for="s_fontSize" data-i18n="appSettings.size">Chat text size</label><select id="s_fontSize"><option value="14">14px</option><option value="15">15px</option><option value="16">16px</option><option value="17">17px</option><option value="18">18px</option></select></div>
   <div class="fld"><label for="s_locale" data-i18n="language.label">Language</label><select id="s_locale"><option value="ko">한국어</option><option value="en">English</option></select></div>
   <div class="fld"><label data-i18n="theme.label">Theme</label><div id="themeToggle" role="group"><button type="button" data-theme-choice="dark" data-i18n="theme.dark">Dark</button><button type="button" data-theme-choice="light" data-i18n="theme.light">Light</button></div></div>
-  <div class="fld"><label><input type="checkbox" id="s_messageSuggestions"> <span data-i18n="suggestions.setting">Next message suggestions</span></label><small data-i18n="suggestions.help">Uses this room's main CLI after a reply. Additional CLI usage applies. Tab fills the input; Enter sends.</small></div>
+  <section class="suggestion-setting" aria-labelledby="suggestionSettingTitle">
+    <label class="suggestion-setting-heading" for="s_messageSuggestions">
+      <span id="suggestionSettingTitle" data-i18n="suggestions.setting">Next message suggestions</span>
+      <input type="checkbox" role="switch" id="s_messageSuggestions" aria-describedby="suggestionSettingHelp suggestionSettingUsage">
+    </label>
+    <p id="suggestionSettingHelp" data-i18n="suggestions.help">Suggests your next message using this room's main CLI.</p>
+    <div class="suggestion-setting-footer">
+      <span class="suggestion-setting-keys"><kbd>Tab</kbd> <span data-i18n="suggestions.insert">Insert</span><span aria-hidden="true">·</span><kbd>Enter</kbd> <span data-i18n="suggestions.send">Send</span></span>
+      <span id="suggestionSettingUsage" data-i18n="suggestions.usage">Additional usage</span>
+    </div>
+  </section>
   <div id="fontPreview" data-i18n="appSettings.preview">Readable conversations, comfortable work. ABC 123</div>
  </div>
 </div>

@@ -1179,7 +1179,7 @@ function entryEl(e) {
   }
   if (isToolActivity(e)) {
     div.className = "activity " + e.author;
-    div.innerHTML = `<span class="activity-tool-icon" aria-hidden="true"></span><span>${esc(activityLabel(e.text))}</span>`;
+    div.innerHTML = `<span class="activity-tool-icon" aria-hidden="true"></span><span>${esc(e.meta?.subagent ? `${seatName(e.author)} - ${activityLabel(e.text)}` : activityLabel(e.text))}</span>`;
     return div;
   }
   if (e.kind === "system") {
@@ -1360,7 +1360,7 @@ function setToggleLabel(toggle, expanded) {
   if (!toggle.firstElementChild) toggle.innerHTML = `<span class="activity-chevron"></span><span class="activity-tool-icon" aria-hidden="true"></span><span></span>`;
   const first = activityRunEntries(Number(toggle.dataset.runStart))[0];
   toggle.firstElementChild.textContent = expanded ? "▾" : "▸";
-  toggle.lastElementChild.textContent = activityLabel(first?.text);
+  toggle.lastElementChild.textContent = first?.meta?.subagent ? `${seatName(first.author)} - ${activityLabel(first.text).split("\n")[0]}` : activityLabel(first?.text);
   toggle.title = activityLabel(first?.text);
   toggle.setAttribute("aria-label", t(expanded ? "progress.hideActions" : "progress.showActions"));
   toggle.setAttribute("aria-expanded", String(expanded));

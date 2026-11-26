@@ -1344,3 +1344,17 @@ body #workPanel.panel-preview.with-diff { width:min(800px, calc(100vw - 24px)); 
 
 #messageSuggestionHint { position: absolute; right: 12px; bottom: 100%; margin-bottom: 5px; font-size: 11px; color: var(--text-dim); background: var(--panel); border: 1px solid var(--border2); border-radius: 8px; padding: 4px 8px; }
 #messageSuggestionHint[hidden] { display: none; }
+
+/* A compact app preference; keep the native checkbox's keyboard behavior. */
+.suggestion-setting { margin:16px 0; padding:16px; border:1px solid var(--border2); border-radius:14px; background:linear-gradient(135deg,var(--panel2),var(--panel)); }
+.suggestion-setting-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; color:var(--text); font-size:13px; font-weight:600; cursor:pointer; }
+#s_messageSuggestions { appearance:none; -webkit-appearance:none; position:relative; flex:0 0 42px; width:42px; height:24px; margin:0; padding:0; border:1px solid var(--border2); border-radius:999px; background:var(--bg); cursor:pointer; transition:background .18s ease,border-color .18s ease; }
+#s_messageSuggestions::before { content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:var(--text-dim); transition:transform .18s ease,background .18s ease; }
+#s_messageSuggestions:checked { background:var(--user); border-color:var(--user); }
+#s_messageSuggestions:checked::before { transform:translateX(18px); background:var(--on-accent); }
+#s_messageSuggestions:focus-visible { outline:2px solid var(--user); outline-offset:4px; }
+.suggestion-setting p { margin:8px 0 14px; color:var(--text-dim); font-size:12px; font-weight:400; line-height:1.6; }
+.suggestion-setting-footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 16px; color:var(--text-faint); font-size:11px; font-weight:400; }
+.suggestion-setting-keys { display:inline-flex; align-items:center; gap:6px; }
+.suggestion-setting kbd { padding:2px 5px; border:1px solid var(--border2); border-radius:5px; background:var(--bg2); color:var(--text-dim); font:inherit; line-height:1.2; }
+@media (prefers-reduced-motion:reduce) { #s_messageSuggestions, #s_messageSuggestions::before { transition:none; } }

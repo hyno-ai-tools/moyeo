@@ -1321,6 +1321,7 @@ Your call name in this room is @{{AGENT_MENTION}}. Your stable compatibility men
 
 How it works: messages from the user and your peers that occurred since your last turn are relayed to you inside a [Room activity ...] block. Each entry begins with a Parley-authored speaker label; later physical lines begin with | to mark a continuation of that same entry. Addressing is delivery: when you want a peer to answer, include that peer's listed @call-name explicitly.
 
+Native subagent reporting: keep the main conversation coherent. When native subagent work contributes to the task, briefly explain what it checked or did and the relevant findings in your own public update or final answer. Do not paste their full messages or repeat their progress fragment by fragment.
 Peer identity and delivery: the named participants above are separate MoYEO CLI seats, NOT your native subagents or roles. A request to consult one of them must be sent to that exact seat using its listed @call-name and a concrete request in your public reply. Include the request in your final reply even if you mentioned it during progress. Do not create, rename or substitute a native subagent for a room participant. An internal critic, architect or reviewer is not that participant. Do not report their agreement, review or completed consultation until an actual room message authored by that seat is delivered to you. Saying you will ask is not delivery; missing or blocked delivery means consultation is still pending.
 
 ${PEER_CONTRACT}
@@ -1946,6 +1947,12 @@ async function codexSend(room, { seat = "codex", prompt, briefing, onStream, onA
   const onLine = (line) => {
     if (!line.startsWith("{")) return;
     let obj; try { obj = JSON.parse(line); } catch { return; }
+    if (obj.type === "subagent.activity" && obj.subagent) {
+      const child = obj.subagent;
+      const status = child.status === 'completed' ? '완료' : child.status === 'failed' ? '실패' : '작업 중';
+      onActivity?.(`하위 에이전트(${child.label}) · ${status}${obj.text ? '\n' + obj.text : ''}`, { subagent: child });
+      return;
+    }
     for (const child of subagentEvents("codex", obj)) onActivity?.(`↳ ${child.label}`, { subagent: child });
     if (obj.type === "turn.completed" && obj.usage) {
       usage = obj.usage;

@@ -17,7 +17,7 @@
     "test": "node test/smoke.mjs",
     "test:smoke": "node test/smoke.mjs",
     "test:browser": "playwright test --config test/browser.config.mjs",
-    "test:unit": "node --test test/unit.mjs test/i18n.mjs test/skill-autocomplete.mjs test/skill-invocation.mjs test/composer-adjustment.mjs test/live-progress.mjs test/fast-mode.mjs test/provider-usage.mjs test/usage-ui.mjs test/project-links.mjs test/project-links-ui.mjs test/project-links-api.mjs test/codex-command.mjs test/update-manager.mjs test/update-ui.mjs test/three-seats.mjs test/seat-persona.mjs test/message-suggestions.mjs test/message-suggestions-api.mjs",
+    "test:unit": "node --test test/unit.mjs test/i18n.mjs test/skill-autocomplete.mjs test/skill-invocation.mjs test/composer-adjustment.mjs test/live-progress.mjs test/fast-mode.mjs test/provider-usage.mjs test/usage-ui.mjs test/project-links.mjs test/project-links-ui.mjs test/project-links-api.mjs test/codex-command.mjs test/update-manager.mjs test/update-ui.mjs test/three-seats.mjs test/seat-persona.mjs test/message-suggestions.mjs test/message-suggestions-api.mjs test/codex-subagent-isolation.mjs",
     "test:retry": "node test/retry.mjs",
     "test:automatic": "node test/automatic.mjs",
     "test:claude-sessions": "node test/claude-sessions.mjs",
