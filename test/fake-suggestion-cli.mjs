@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 const args = process.argv.slice(2);
 let input = ''; for await (const chunk of process.stdin) input += chunk;
 const prompt = args.includes('--input-format') ? JSON.parse(input).message.content : input;
-if (prompt.startsWith('Predict ONE short next message')) {
+if (prompt.startsWith('Predict ONE next message')) {
   const text = '예시 하나로 더 설명해줘.';
   if (args.includes('--output-last-message')) fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], text);
   else if (args.includes('--mode')) console.log(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: text } }));

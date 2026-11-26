@@ -32,7 +32,7 @@ test('extracts only explicit successful public results across all providers', ()
   assert.equal(suggestionResult('gemini', '{"event":"thinking","text":"private"}'), '');
 });
 test('rejects malformed, lengthy and unavailable suggestions', () => {
-  for (const value of ['NONE', '<script>', 'a\nb', 'a'.repeat(161), null]) assert.equal(cleanSuggestion(value), '');
+  for (const value of ['NONE', '<script>', 'a\nb', 'a'.repeat(2001), null]) assert.equal(cleanSuggestion(value), '');
 });
 test('coalesces concurrent tabs and caches failure without retries', async () => {
   const cache = createSuggestionCache(); let count = 0;
@@ -42,4 +42,35 @@ test('coalesces concurrent tabs and caches failure without retries', async () =>
   assert.deepEqual(await Promise.all([a,b]), ['예시 보여줘','예시 보여줘']); assert.equal(count, 1); assert.equal(cache.busy, false);
   await cache.get('fail', () => { throw Error('fail'); });
   assert.equal(await cache.get('fail', generate), ''); assert.equal(count, 1);
+});
+
+
+test('keeps useful longer suggestions without truncating their intent', () => {
+  const text = '앞에서 정한 기준대로 추천 기능을 수정하고 이미 끝난 작업은 반복하지 않게 해줘. '.repeat(5).trim();
+  assert.ok(text.length > 160);
+  assert.equal(cleanSuggestion(text), text);
+});
+
+test('supplies earlier user habits separately from recent completion evidence', () => {
+  const value = room();
+  value.entries = [{ n: 1, kind: 'user', text: '끝나면 커밋하고 양쪽에 푸시해줘' },
+    ...Array.from({ length: 24 }, (_, i) => ({ n: i + 2, kind: i % 2 ? 'agent' : 'user', text: '최근 대화 ' + i }))];
+  value.entries.at(-1).text = '수정하고 커밋과 양쪽 푸시까지 완료했어. 화면 검증은 아직 하지 않았어.';
+  const context = suggestionContext(value);
+  const data = JSON.parse(context.prompt.slice(context.prompt.indexOf('\n{')));
+  assert.deepEqual(data.earlierUserMessages, ['끝나면 커밋하고 양쪽에 푸시해줘']);
+  assert.equal(data.conversation.at(-1).text, value.entries.at(-1).text);
+  value.entries[0].text = '커밋은 내가 할게';
+  assert.notEqual(suggestionContext(value).key, context.key);
+});
+
+test('bounds large histories while retaining the final completion report', () => {
+  const value = room();
+  value.entries = Array.from({ length: 400 }, (_, i) => ({ n: i, kind: i % 2 ? 'agent' : 'user', text: 'x'.repeat(10000) + ' 완료: 푸시까지 끝남' }));
+  const context = suggestionContext(value);
+  const data = JSON.parse(context.prompt.slice(context.prompt.indexOf('\n{')));
+  assert.ok(data.conversation.length <= 24);
+  assert.ok(data.conversation.reduce((sum, e) => sum + e.text.length, 0) <= 24000);
+  assert.ok(data.earlierUserMessages.length <= 12);
+  assert.match(data.conversation.at(-1).text, /완료: 푸시까지 끝남$/);
 });
