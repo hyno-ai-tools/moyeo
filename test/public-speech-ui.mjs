@@ -30,27 +30,31 @@ test("speech stays a bubble during work; only completed runs fold with their too
   assert.equal(active.children[1].className, "tool-run");
   state.summary.busyInfo = [];
   const completed = node(); context.appendEntryRange(completed, entries);
-  assert.equal(completed.children.length, 2);
-  assert.equal(completed.children[0].className, "completed-work");
-  assert.equal(completed.children[0].open, false);
-  assert.equal(completed.children[0].children.length, 1);
-  assert.equal(completed.children[1].text, "완료");
-  completed.children[0].open = true; completed.children[0].ontoggle();
-  assert.equal(completed.children[0].children.length, 14);
-  completed.children[0].ontoggle();
-  assert.equal(completed.children[0].children.length, 14);
-  const reload = node(); context.appendEntryRange(reload, entries);
-  assert.equal(reload.children[0].open, true);
-  state.summary.busyInfo = [{ runId: "run-2" }];
-  const nextRun = node(); context.appendEntryRange(nextRun, entries);
-  assert.equal(nextRun.children[0].className, "completed-work");
-  // A correction is still the same work even though it uses a new CLI call.
-  state.summary.continuingRunIds = ["run-1"];
-  const continuing = node(); context.appendEntryRange(continuing, entries);
-  assert.match(continuing.children[0].className, /public-speech/);
-  state.summary.continuingRunIds = [];
-  const settled = node(); context.appendEntryRange(settled, entries);
-  assert.equal(settled.children[0].className, "completed-work");
+  assert.equal(completed.children.length, 3);
+  assert.match(completed.children[0].className, /public-speech/);
+  assert.equal(completed.children[1].className, "completed-work");
+  assert.equal(completed.children[1].open, false);
+  completed.children[1].open = true; completed.children[1].ontoggle();
+  assert.equal(completed.children[1].children.length, 13);
+  completed.children[1].ontoggle();
+  assert.equal(completed.children[1].children.length, 13);
+  for (const author of ["codex", "claude", "gemini"]) {
+    const peer = node();
+    context.appendEntryRange(peer, [{ ...speech, author }]);
+    assert.match(peer.children[0].className, /public-speech/);
+  }
+  context.t = key => key;
+  const mixed = node();
+  context.appendEntryRange(mixed, [
+    { n: 20, kind: "activity", author: "codex", text: "child", meta: { runId: "run-1", subagent: { id: "child" } } },
+    { ...speech, n: 21 },
+    entries[1],
+  ]);
+  assert.equal(mixed.children.length, 3);
+  assert.equal(mixed.children[0].children[0].textContent, "progress.subagentWorkDetails");
+  assert.match(mixed.children[1].className, /public-speech/);
+  assert.equal(mixed.children[2].children[0].textContent, "progress.showActions");
+
 });
 
 test("live cards use configured names and roles for all providers", () => {

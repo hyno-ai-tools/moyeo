@@ -1134,7 +1134,7 @@ function appendCompletedWork(parent, entries) {
   const key = `completed:${entries[0].meta.runId}:${entries[0].n}`;
   detail.open = state.expandedActivity.has(key);
   const summary = document.createElement("summary");
-  summary.textContent = t("progress.workDetails");
+  summary.textContent = t(entries[0].meta?.subagent ? "progress.subagentWorkDetails" : "progress.showActions");
   detail.appendChild(summary);
   let loaded = false;
   detail.loadEntries = () => {
@@ -1465,9 +1465,10 @@ function appendEntryRange(parent, entries) {
   };
   for (let i = 0; i < entries.length;) {
     const e = entries[i];
-    if (e.kind === "activity" && e.meta?.runId && !isActiveWorkRun(e.meta.runId)) {
+    if (isToolActivity(e) && e.meta?.runId && !isActiveWorkRun(e.meta.runId)) {
       let end = i + 1;
-      while (end < entries.length && entries[end].kind === "activity" &&
+      while (end < entries.length && isToolActivity(entries[end]) &&
+        Boolean(entries[end].meta?.subagent) === Boolean(e.meta?.subagent) &&
         entries[end].author === e.author && entries[end].meta?.runId === e.meta.runId) end++;
       appendCompletedWork(parent, entries.slice(i, end));
       i = end;
